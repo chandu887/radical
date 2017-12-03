@@ -1,6 +1,12 @@
 package com.radical.lms.controller;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.sql.Blob;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
@@ -9,24 +15,32 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.imageio.ImageIO;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import javax.swing.plaf.basic.BasicInternalFrameTitlePane.IconifyAction;
 
 import org.apache.commons.lang.math.NumberUtils;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.hibernate.Hibernate;
 import org.quartz.JobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.ui.ModelMap;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.radical.lms.beans.CourseBean;
 import com.radical.lms.beans.DashBoardForm;
 import com.radical.lms.beans.LeadsEntityBean;
 import com.radical.lms.beans.MailTemplateBean;
@@ -65,12 +79,13 @@ public class UserController {
 		HttpSession session = request.getSession();
 		UsersEntity user = (UsersEntity) session.getAttribute("userInfo");
 		if (user != null) {
-			switch (user.getRoleId()) {
+			/*switch (user.getRoleId()) {
 			case 1:
 				return "redirect:/dashboard?leadStatus=1";
 			default:
 				return "login";
-			}
+			}*/
+			return "redirect:/dashboard?leadStatus=1";
 		}
 		return "login";
 	}
@@ -83,7 +98,6 @@ public class UserController {
 			@RequestParam(value = "messageText", defaultValue = "", required = false) String messageText) {
 		HttpSession session = request.getSession();
 		UsersEntity user = (UsersEntity) session.getAttribute("userInfo");
-		
 
 		DashBoardForm dashBoardForm = null;
 		if (session.getAttribute("dashBoardForm") != null) {
@@ -93,7 +107,6 @@ public class UserController {
 			dashBoardForm.setPageNumber(1);
 			dashBoardForm.setPageLimit(100);
 		}
-
 		if (!isFromPagination) {
 			dashBoardForm.setPageNumber(1);
 		}
@@ -121,6 +134,7 @@ public class UserController {
 		dashBoardForm.setNewCount((int) newCount);
 		dashBoardForm.setOpenCount((int) openCount);
 		dashBoardForm.setClosedCount((int) closeCount);
+		dashBoardForm.setDeleteCount((int) deletedCount);
 		dashBoardForm.setHotCount((int) hotCount); 
 
 		dashBoardForm.setCurrentStatus(leadStatus);
@@ -158,9 +172,9 @@ public class UserController {
 
 		List<Integer> limitList = new ArrayList<Integer>();
 		limitList.add(100);
-		limitList.add(200);
 		limitList.add(500);
 		limitList.add(1000);
+		limitList.add(2000);
 		dashBoardForm.setLimitList(limitList);
 
 		if (isFromViewMailTemplate) {
@@ -178,6 +192,7 @@ public class UserController {
 		Map<Integer, String> coursesMap = this.userService.getCourses();
 		/*List<CourseCategeoryEntity> courseTemplates = userService.getCategoryList(dashBoardForm);
 		map.addAttribute("courseTemplates", courseTemplates);*/
+		List<UsersEntity> agentsList = userService.getAgentsList();
 
 		map.addAttribute("dashBoardForm", dashBoardForm);
 		map.addAttribute("coursesMap", coursesMap);
@@ -185,6 +200,7 @@ public class UserController {
 		map.addAttribute("courseCategories", courseCategories);
 		map.addAttribute("messageText", messageText);
 		map.addAttribute("userName", user.getUserName());
+		map.addAttribute("agentsList", agentsList);
 		session.setAttribute("dashBoardForm", dashBoardForm);
 		
 		return "dashboard";
@@ -197,10 +213,10 @@ public class UserController {
 		if (user != null) {
 			HttpSession session = request.getSession();
 			session.setAttribute("userInfo", user);
-			switch (user.getRoleId()) {
-			case 1:
+			/*switch (user.getRoleId()) {
+			case 1:*/
 				return "redirect:/dashboard?leadStatus=1";
-			}
+			/*}*/
 		}
 		return "loginfailure";
 	}
@@ -220,60 +236,77 @@ public class UserController {
 
 	@RequestMapping(value = "/testCron", method = RequestMethod.GET)
 	public String testCron(HttpServletRequest request) throws JobExecutionException {
-		/*MailReadingJob mail = new MailReadingJob();*/
-		emailService.readMailInbox();
+		/*MailReadingJob mail = new MailReadingJob();
+		//emailService.readMailInbox();
 		// MailSendingJob mail = new MailSendingJob();
-		/*mail.executeInternal(null);*/
+		mail.executeInternal(null);
+		LeadsEntity leadsEntity = new LeadsEntity();
+		leadsEntity.setEmailId("chandu.mutta@gmail.com");
+		leadsEntity.setCourseCategeory(0);
+		
+		if (leadsEntity.getEmailId() != null) {
+			CourseCategeoryEntity caterogy = null;
+			if (leadsEntity.getCourseCategeory() != 0) {
+				caterogy = userService.getCategoryByCategoryId(leadsEntity.getCourseCategeory());
+			}
+			if (caterogy == null) {							
+				emailService.sendMailWithAttachementDynamically(leadsEntity.getEmailId(), null, null, null);
+			} else {
+				emailService.sendMailWithAttachementDynamically(leadsEntity.getEmailId(), caterogy.getSubject(), caterogy.getMailerPath(), null);
+			}
+		}*/
 		return "login";
 	}
 
 	@RequestMapping(value = "/addlead", method = RequestMethod.POST)
 	public String addLead(@ModelAttribute(value = "addLeadForm") LeadsEntity leadFormEntity, Model model,
-			@RequestParam("courseList") List<Integer> courseIdList) {
+			@RequestParam("courseList") List<Integer> courseIdList, @RequestParam("sendingeMailAndSmsType") String sendingeMailAndSmsType,
+			@RequestParam("nonTemplatedSms") String sms, @RequestParam("nonTemplatedEmailSubject") String subject,
+			@RequestParam("nonTemplatedEmailBody") String mailbody,@RequestParam("nonTemplateFile") MultipartFile attachementFile
+			) {
 		
 		LeadsEntity leadsEntity = null;
-		for (Integer courseId : courseIdList) {
+		if (courseIdList != null && !courseIdList.isEmpty()) {			
+			for (Integer courseId : courseIdList) {
+				leadsEntity = new LeadsEntity();
+				leadsEntity = leadService.getLeadEntityBean(leadFormEntity, leadsEntity, courseId);
+				this.leadService.saveLead(leadsEntity);
+			}
+		} else {
 			leadsEntity = new LeadsEntity();
-			leadsEntity.setName(leadFormEntity.getName());
-			leadsEntity.setMobileNo(leadFormEntity.getMobileNo());
-			leadsEntity.setEmailId(leadFormEntity.getEmailId());
-			leadsEntity.setLeadSource(leadFormEntity.getLeadSource());
-			leadsEntity.setComments(leadFormEntity.getComments());
-			leadsEntity.setAddress(leadFormEntity.getAddress());
-			leadsEntity.setArea(leadFormEntity.getArea());
-			leadsEntity.setCity(leadFormEntity.getCity());
-			leadsEntity.setLocation(leadFormEntity.getLocation());
-			leadsEntity.setAssignedTo(leadFormEntity.getAssignedTo());
-			leadsEntity.setModeofTraining(leadFormEntity.getModeofTraining());
-			leadsEntity.setTypeofTraining(leadFormEntity.getTypeofTraining());
-			leadsEntity.setLabels(leadFormEntity.getLabels());
-			/* int courseId = Integer.parseInt(course); */
-			int courseCategeory = this.userService.getCoursesCategeoryMapping().get(courseId);
-			// int courseCategeory =
-			// this.userService.getCoursesCategeoryMapping().get(leadsEntity.getCourse());
-			leadsEntity.setCourse(courseId);
-			leadsEntity.setStatus(leadFormEntity.getStatus());
-			leadsEntity.setCourseCategeory(courseCategeory);
-			leadsEntity.setCreatedDate(new Date());
-			leadsEntity.setLastUpdatedDate(new Date());
+			leadsEntity = leadService.getLeadEntityBean(leadFormEntity, leadsEntity, 0);
 			this.leadService.saveLead(leadsEntity);
 		}
 		
 		if (leadsEntity != null) {
-			if (leadsEntity.getEmailId() != null) {
-				if(leadsEntity.getCourseCategeory()!=0){
-					CourseCategeoryEntity category = userService.getCategoryListBasedOnCourseId(leadsEntity.getCourseCategeory());
-					emailService.sendMail(leadsEntity.getEmailId(),category.getSubject(),category.getMessagebody());
-				} else {
-				emailService.sendMail(leadsEntity.getEmailId(), Constants.MAIL_SUBJECT,null);
+			if ("defaultmailandsms".equals(sendingeMailAndSmsType)) {
+				if (leadsEntity.getEmailId() != null) {
+					if(leadsEntity.getCourseCategeory()!=0){
+						CourseCategeoryEntity category = userService.getCategoryListBasedOnCourseId(leadsEntity.getCourseCategeory());
+						CourseEntity courseEntity = userService.getCourseByCourseId(leadsEntity.getCourse());
+						emailService.sendMailWithAttachementDynamically(leadsEntity.getEmailId(),category.getSubject(), category.getMailerPath(), courseEntity);
+					}
+				}
+				if (leadsEntity.getMobileNo() != null) {
+					userService.sendSms(Constants.SMS_TEMPLATE,
+							leadsEntity.getMobileNo());
+				}
+			} else if ("manualmailandsms".equals(sendingeMailAndSmsType)) {
+				if (leadsEntity.getEmailId() != null) {
+					if (!attachementFile.isEmpty()) {
+					emailService.sendMailWithAttachementManually(leadsEntity.getEmailId(), subject, mailbody, attachementFile);
+					} else {
+					emailService.sendMail(leadsEntity.getEmailId(), subject, mailbody);
+					}
+				}
+				if (leadsEntity.getMobileNo() != null) {
+					userService.sendSms(sms, leadsEntity.getMobileNo());
 				}
 			}
-			if (leadsEntity.getMobileNo() != null) {
-				userService.sendSms(Constants.SMS_TEMPLATE,
-						leadsEntity.getMobileNo());
-			}
+				
+			return "redirect:/dashboard?leadStatus="+leadFormEntity.getStatus()+"&messageText=Lead Added successfully";
 		}
-		return "redirect:/dashboard?leadStatus="+leadFormEntity.getStatus()+"&messageText=Lead Added successfully";
+		return "redirect:/dashboard?leadStatus="+leadFormEntity.getStatus()+"&messageText=Lead Not Added";
 	}
 
 	@RequestMapping(value = "/changeStatus", method = RequestMethod.POST)
@@ -285,6 +318,7 @@ public class UserController {
 		if (session.getAttribute("dashBoardForm") != null) {
 			dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
 		}
+		clearDashBoardFilter(dashBoardForm);
 		String[] changeStatusLeadIdsSplitArray = changeStatusLeadIds.split(",");
 		List<Integer> changeStatusLeadIdsList = new ArrayList<Integer>();
 		for (String leadId : changeStatusLeadIdsSplitArray) {
@@ -312,8 +346,13 @@ public class UserController {
 		if (session.getAttribute("dashBoardForm") != null) {
 			dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
 		}
-		dashBoardForm.setFromDate(fromDate);
-		dashBoardForm.setToDate(toDate);
+		clearDashBoardFilter(dashBoardForm);
+		if(null != fromDate && !(fromDate.equalsIgnoreCase(""))){
+			dashBoardForm.setFromDate(fromDate);
+		}
+		if(null != toDate && !(toDate.equalsIgnoreCase(""))){
+			dashBoardForm.setToDate(toDate);
+		}
 		if(course!=0){
 			dashBoardForm.setCourse(course);
 		} 
@@ -381,6 +420,7 @@ public class UserController {
 			@RequestParam(value = "isFromViewMailTemplate", defaultValue = "false", required = false) Boolean isFromViewMailTemplate) {
 		HttpSession session = request.getSession();
 		DashBoardForm dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
+		//clearDashBoardFilter(dashBoardForm);
 		dashBoardForm.setPageNumber(currentPage);
 		session.setAttribute("dashBoardForm", dashBoardForm);
 		if (isFromViewMailTemplate) {
@@ -395,6 +435,7 @@ public class UserController {
 			@RequestParam(value = "isFromViewMailTemplate", defaultValue = "false", required = false) Boolean isFromViewMailTemplate) {
 		HttpSession session = request.getSession();
 		DashBoardForm dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
+		//clearDashBoardFilter(dashBoardForm);
 		dashBoardForm.setPageNumber(1);
 		dashBoardForm.setPageLimit(pageLimit);
 		session.setAttribute("dashBoardForm", dashBoardForm);
@@ -409,6 +450,7 @@ public class UserController {
 	public String searchByCourse(HttpServletRequest request, @RequestParam("course") String courseName) {
 		HttpSession session = request.getSession();
 		DashBoardForm dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
+		clearDashBoardFilter(dashBoardForm);
 		dashBoardForm.setSearchData(courseName);
 		dashBoardForm.setCourse(0);
 		dashBoardForm.setCategory(0);
@@ -421,8 +463,12 @@ public class UserController {
 			dashBoardForm.setCourse(userService.getCourseNameIdMapping().get(courseName));
 		} else if (courseName.contains("@")) {
 			dashBoardForm.setEmail(courseName);
-		} else if (NumberUtils.isNumber(courseName)) {
+		} else if (NumberUtils.isNumber(courseName) && courseName.length() == 10) {
 			dashBoardForm.setMobileNumber(courseName);
+		} else if (NumberUtils.isNumber(courseName)) {
+			dashBoardForm.setLeadId(Integer.parseInt(courseName));
+		} else {
+			dashBoardForm.setName(courseName);
 		}
 
 		session.setAttribute("dashBoardForm", dashBoardForm);
@@ -438,10 +484,32 @@ public class UserController {
 	@RequestMapping(value = "/editlead", method = RequestMethod.POST)
 	public String editLead(@ModelAttribute(value = "editLeadForm") LeadsEntity leadsEntity, Model model) {
 		LeadsEntity lead = leadService.getLeadByLeadId(leadsEntity.getLeadiId());
-		leadsEntity.setCreatedDate(lead.getCreatedDate());
+		
 		leadsEntity.setLastUpdatedDate(new Date());
 		leadsEntity.setReason(lead.getReason());
+		
+		if (/*lead.getCourseCategeory() != 21 &&*/ leadsEntity.getCourse() != lead.getCourse() && leadsEntity.getCourse() != 0 ) {
+			leadsEntity.setLeadiId(0);
+			leadsEntity.setCreatedDate(new Date());
+		} else {
+			leadsEntity.setCreatedDate(lead.getCreatedDate());
+		}
+		if(leadsEntity.getCourseCategeory()  == 21){
+			if(lead.getCourseCategeory() != 21) {
+			leadsEntity.setLeadiId(0);
+			leadsEntity.setCreatedDate(new Date());
+			leadsEntity.setCourse(0);
+			leadsEntity.setCourseName(leadsEntity.getCourseName());
+			} else if(!(lead.getCourseName()).equalsIgnoreCase(leadsEntity.getCourseName())) {
+				leadsEntity.setLeadiId(0);
+				leadsEntity.setCreatedDate(new Date());
+				leadsEntity.setCourse(0);
+				leadsEntity.setCourseName(leadsEntity.getCourseName());
+			}
+		}
+		
 		leadService.saveLead(leadsEntity);
+		
 		return "redirect:/dashboard?leadStatus=" + leadsEntity.getStatus()+"&messageText=Lead Updated Successfully";
 	}
 
@@ -453,7 +521,7 @@ public class UserController {
 		if (session.getAttribute("dashBoardForm") != null) {
 			dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
 		}
-
+		//clearDashBoardFilter(dashBoardForm);
 		String[] downloadLeadIdsSplitArray = downloadLeadIds.split(",");
 		List<Integer> downloadLeadIdsList = new ArrayList<Integer>();
 		for (String leadId : downloadLeadIdsSplitArray) {
@@ -482,14 +550,8 @@ public class UserController {
 		List<CourseEntity> courseList = this.userService.getCourseList(intCategoryId);
 		return courseList;
 	}
-
-	@RequestMapping(value = "/clearFilter", method = RequestMethod.GET)
-	public String clearFilter(HttpServletRequest request) {
-		HttpSession session = request.getSession();
-		DashBoardForm dashBoardForm = null;
-		if (session.getAttribute("dashBoardForm") != null) {
-			dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
-		}
+	
+	public void clearDashBoardFilter(DashBoardForm dashBoardForm){
 		dashBoardForm.setFromDate("");
 		dashBoardForm.setToDate("");
 		dashBoardForm.setCourse(0);
@@ -503,23 +565,90 @@ public class UserController {
 		dashBoardForm.setLocation(null);
 		dashBoardForm.setAssignedTo(0);
 		dashBoardForm.setLeadSource(0);
-		session.setAttribute("dashBoardForm", dashBoardForm);
-		return "redirect:/dashboard?leadStatus=1"/*+dashBoardForm.getCurrentStatus()*/;
+		dashBoardForm.setName(null);
+		dashBoardForm.setLeadId(0);
 	}
 
-	@RequestMapping(value = "/createMailTemplate", method = RequestMethod.POST)
-	public String saveTemplate(@ModelAttribute(value = "createMailTemplateForm") CourseCategeoryEntity categeoryEntity,
+	@RequestMapping(value = "/clearFilter", method = RequestMethod.GET)
+	public String clearFilter(HttpServletRequest request) {
+		HttpSession session = request.getSession();
+		DashBoardForm dashBoardForm = null;
+		if (session.getAttribute("dashBoardForm") != null) {
+			dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
+		}
+		clearDashBoardFilter(dashBoardForm);
+		session.setAttribute("dashBoardForm", dashBoardForm);
+		return "redirect:/dashboard?leadStatus=1";
+	}
+	
+	@RequestMapping(value = "/createCourseAttachment", method = RequestMethod.POST)
+	public String createCourseAttachment(@RequestParam("courseFile") MultipartFile uploadFile,
+			@RequestParam("courseId") int courseId, HttpServletRequest request, HttpServletResponse response,
 			Model model) {
-		CourseCategeoryEntity category = userService.getCategoryListBasedOnCourseId(categeoryEntity.getCategoryId());
-		category.setSubject(categeoryEntity.getSubject());
-		category.setMessagebody(categeoryEntity.getMessagebody());
-		category.setCreatedTime(new Date());
-		
-		/*CourseEntity course = userService.getCourseListBasedOnCourseId(courseEntity.getCourseId());
-		course.setSubject(courseEntity.getSubject());
-		course.setMessagebody(courseEntity.getMessagebody());
-		course.setCreatedTime(new Date());*/
-		userService.saveTemplate(category);
+		HttpSession session = request.getSession();
+		CourseEntity courseEntity = userService.getCourseByCourseId(courseId);
+		if (!uploadFile.isEmpty()) {
+			try {
+				courseEntity.setMailerPath(uploadFile.getOriginalFilename());
+				courseEntity.setFileType(uploadFile.getContentType());
+				Blob blob = Hibernate.createBlob(uploadFile.getInputStream());
+				courseEntity.setContent(blob);
+				courseEntity.setCreatedTime(new Date());
+				userService.saveCourse(courseEntity);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return "redirect:/viewCourseAttachements?messageText=Course attachemnt added successfully";
+	}
+
+
+	@RequestMapping(value = "/createMailTemplate", method = RequestMethod.POST)
+	public String saveTemplate(@RequestParam("file") MultipartFile uploadFile,
+			@RequestParam("categoryId") String categeoryId, HttpServletRequest request, HttpServletResponse response,
+			Model model) {
+		HttpSession session = request.getSession();
+		CourseCategeoryEntity category = userService.getCategoryListBasedOnCourseId(Integer.parseInt(categeoryId));
+		if (!uploadFile.isEmpty()) {
+			try {
+				String name = "";
+				String rootPath = System.getProperty(Constants.CATALINA_PATH) + File.separator + "webapps"
+						+ File.separator + "CategoryMailer" + File.separator + "resources" + File.separator + "images"
+						+ File.separator;
+				
+				File dir = new File(rootPath);
+				if (!dir.exists()) {
+					dir.mkdirs();
+				}
+				name = uploadFile.getOriginalFilename();
+				int pos = name.lastIndexOf(".");
+				if (pos != -1) {
+					name = name.substring(0, pos);
+				}
+				BufferedImage bufImage = ImageIO.read(new ByteArrayInputStream(uploadFile.getBytes()));
+				File serverFile = new File(dir.getAbsolutePath() + File.separator + name + Constants.JPG_IMAGE);
+				String imagePath = dir.getAbsolutePath() + File.separator + name+ Constants.JPG_IMAGE;
+				ImageIO.write(bufImage, Constants.JPG, serverFile);
+				imagePath = imagePath.replace(
+						System.getProperty(Constants.CATALINA_PATH) + File.separator + "webapps" + File.separator,
+						"http://www.radicaltechnologies.org/").replace(File.separator, "/");
+				category.setMailerPath(imagePath);
+				/*category.setSubject(categeoryEntity.getSubject());
+				category.setMessagebody(categeoryEntity.getMessagebody());*/
+				category.setCreatedTime(new Date());
+
+				/*
+				 * CourseEntity course =
+				 * userService.getCourseListBasedOnCourseId(courseEntity.
+				 * getCourseId()); course.setSubject(courseEntity.getSubject());
+				 * course.setMessagebody(courseEntity.getMessagebody());
+				 * course.setCreatedTime(new Date());
+				 */
+				userService.saveTemplate(category);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
 		return "redirect:/dashboard?leadStatus=1&messageText=Mail Template Created Successfully";
 	}
 
@@ -531,6 +660,7 @@ public class UserController {
 		if (session.getAttribute("dashBoardForm") != null) {
 			dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
 		}
+		clearDashBoardFilter(dashBoardForm);
 		/*SendEmailEntity sendEmailEntity = new SendEmailEntity();
 		String[] sendTemplateLeadIdsSplitArray = sendTemplateLeadIds.split(",");
 		for (String leadId : sendTemplateLeadIdsSplitArray) {
@@ -544,20 +674,15 @@ public class UserController {
 		String[] sendTemplateLeadIdsSplitArray = sendTemplateLeadIds.split(",");
 		for (String leadId : sendTemplateLeadIdsSplitArray) {
 			LeadsEntity leadsEntity = leadService.getLeadByLeadId(Integer.parseInt(leadId));
-			
 			if (leadsEntity != null) {
 				if (leadsEntity.getEmailId() != null) {
 					if(leadsEntity.getCourseCategeory()!=0){
 						CourseCategeoryEntity categoryEntity = userService.getCategoryListBasedOnCourseId(leadsEntity.getCourseCategeory());
-						emailService.sendMail(leadsEntity.getEmailId(), categoryEntity.getSubject(), categoryEntity.getMessagebody());
-					} else {
-						emailService.sendMail(leadsEntity.getEmailId(), Constants.MAIL_SUBJECT,null);
+						emailService.sendMailWithAttachementDynamically(leadsEntity.getEmailId(), categoryEntity.getSubject(), categoryEntity.getMailerPath(), null);
 					}
 				}
 			}
-		}
-		
-		
+		}		
 		return "redirect:/dashboard?leadStatus=" + dashBoardForm.getCurrentStatus()+"&messageText=Mail Sent Successfully";
 	}
 
@@ -565,19 +690,24 @@ public class UserController {
 	public String nonTemplatedEmailOrSms(HttpServletRequest request, HttpServletResponse response,
 			@RequestParam("nonTemplatedSms") String sms, @RequestParam("nonTemplatedEmailSubject") String subject,
 			@RequestParam("nonTemplatedEmailBody") String mailbody,
-			@RequestParam("leadIds") String sendNonTemplateLeadIds, @RequestParam("optradio") int type) {
+			@RequestParam("leadIds") String sendNonTemplateLeadIds, @RequestParam("optradio") int type,@RequestParam("nonTemplateFile") MultipartFile attachementFile) {
 		HttpSession session = request.getSession();
 		DashBoardForm dashBoardForm = null;
 		if (session.getAttribute("dashBoardForm") != null) {
 			dashBoardForm = (DashBoardForm) session.getAttribute("dashBoardForm");
 		}
+		clearDashBoardFilter(dashBoardForm);
 		String message = "";
 		String[] sendNonTemplateLeadIdsSplitArray = sendNonTemplateLeadIds.split(",");
 		for (String leadId : sendNonTemplateLeadIdsSplitArray) {
 			LeadsEntity lead = leadService.getLeadByLeadId(Integer.parseInt(leadId));
 			if (type == 1) {
 				if (lead.getEmailId() != null) {
-					emailService.sendMail(lead.getEmailId(), subject, mailbody);
+					if (!attachementFile.isEmpty()) {
+						emailService.sendMailWithAttachementManually(lead.getEmailId(), subject, mailbody, attachementFile);
+					} else {
+						emailService.sendMail(lead.getEmailId(), subject, mailbody);
+					}
 					message = "&messageText=Mail Sent Successfully";
 				}
 			} else if (type == 0) {
@@ -610,5 +740,250 @@ public class UserController {
 		userService.saveTemplate(course);*/
 		return "redirect:/dashboard?leadStatus=1&isFromViewMailTemplate=true&messageText=Mail Template Updated Successfully";
 	}
+	
+	@RequestMapping(value = "/viewAgents", method = RequestMethod.GET)
+	public String viewAgents(ModelMap map, @RequestParam(value = "messageText", defaultValue = "", required = false) String messageText) {
+		List<UsersEntity> userssList = userService.getUsersList();
+		map.addAttribute("userssList", userssList);
+		
+		List<UsersEntity> agentsList = userService.getAgentsList();
+		map.addAttribute("agentsList", agentsList);
+		map.addAttribute("message", messageText);
+		map.addAttribute("viewPage", "viewagents");
+		return "adminactivities";
+	}
+	
+	@RequestMapping(value = "/viewCourseAttachements", method = RequestMethod.GET)
+	public String viewCourseAttachements(ModelMap map, @RequestParam(value = "messageText", defaultValue = "", required = false) String messageText) {
+		List<CourseEntity> coursesList = userService.getCoursesListForEmailer();
+		List<CourseEntity> course = userService.getCoursesList();
+		map.addAttribute("course", course);
+		map.addAttribute("coursesList", coursesList);
+		map.addAttribute("message", messageText);
+		map.addAttribute("viewPage", "viewCourseAttachements");
+		return "adminactivities";
+	}
+	
+	
+	@RequestMapping(value = "/getAgentInfo", method = RequestMethod.POST)
+	@ResponseBody
+	public UsersEntity getAgentInfoByUserId(@RequestParam("userId") int userId) {
+		return userService.getUsers(userId);
+	}
+	
+	@RequestMapping(value = "/addAgent", method = RequestMethod.POST)
+	public String addAgent(@ModelAttribute(value = "addAgentForm") UsersEntity userEntity, Model model) {
+		UsersEntity user = new UsersEntity();
+		user.setUserName(userEntity.getUserName());
+		user.setPassword(userEntity.getPassword());
+		user.setEmail(userEntity.getEmail());
+		user.setCreatedTime(new Date());
+		user.setIsActive(1);
+		user.setRoleId(2);
+		userService.saveOrUpdateUser(user);
+		return "redirect:/viewAgents?messageText=Agent added successfully";
+	}
+	
+	@RequestMapping(value = "/editAgent", method = RequestMethod.POST)
+	public String editAgentInfo(@ModelAttribute(value = "editAgentForm") UsersEntity userEntity, Model model) {
+		UsersEntity user = userService.getUsers(userEntity.getUserId());
+		user.setPassword(userEntity.getPassword());
+		user.setEmail(userEntity.getEmail());
+		user.setLastUpdatedtime(new Date());
+		userService.saveOrUpdateUser(user);
+		if (user.getRoleId() == 1) {			
+			return "redirect:/viewAgents?messageText=Admin updated successfully";
+		} else {
+			return "redirect:/viewAgents?messageText=Agent updated successfully";
+		}
+	}
+	
+	
+	@RequestMapping(value = "/isUserExits", method = RequestMethod.POST)
+	@ResponseBody
+	public String isUserExits(@RequestParam("userName") String name) {
+		UsersEntity user = userService.getUserByUserName(name);
+		if (user == null) {
+			return "no";
+		} else {
+			return "yes";
+		}
+	}
+	
+	@RequestMapping(value = "/updateAgent", method = RequestMethod.POST)
+	@ResponseBody
+	public String updateAgent(@RequestParam("userId") int userId, @RequestParam("value") int value) {
+		UsersEntity user = userService.getUsers(userId);
+		user.setIsActive(value);
+		user.setLastUpdatedtime(new Date());
+		userService.saveOrUpdateUser(user);
+		return "success";
+	}
+	
+	@RequestMapping(value = "/viewCategories", method = RequestMethod.GET)
+	public String viewCategories(ModelMap map, @RequestParam(value = "messageText", defaultValue = "", required = false) String messageText) {
+		List<CourseCategeoryEntity> categoriesList = userService.getCourseCategoriesList();
+		map.addAttribute("categoriesList", categoriesList);
+		map.addAttribute("viewPage", "viewcategories");
+		map.addAttribute("message", messageText);
+		return "adminactivities";
+	}
+	
+	@RequestMapping(value = "/updateCategory", method = RequestMethod.POST)
+	@ResponseBody
+	public String updateCategory(@RequestParam("categoryId") int categoryId, @RequestParam("value") int value) {
+		CourseCategeoryEntity category = userService.getCategoryByCategoryId(categoryId);
+		category.setIsActive(value);
+		category.setUpdatedTime(new Date());
+		userService.saveCategory(category);
+		userService.getAllCourseCategories();
+		return "success";
+	}
+	
+	@RequestMapping(value = "/addCategory", method = RequestMethod.POST)
+	public String addCategory(@RequestParam("categoryName") String categoryName) {
+		CourseCategeoryEntity category = userService.getCategoryByCategoryName(categoryName);
+		if (category == null) {			
+			CourseCategeoryEntity categoryEntity = new CourseCategeoryEntity();
+			categoryEntity.setCategeoryName(categoryName);
+			categoryEntity.setCreatedTime(new Date());
+			categoryEntity.setIsActive(1);
+			userService.saveCategory(categoryEntity);
+			return "redirect:/viewCategories?messageText=Category added successfully";
+		} else {
+			return "redirect:/viewCategories?messageText=Category already exists";
+		}
+	}
+	
+	@RequestMapping(value = "/viewCourses", method = RequestMethod.GET)
+	public String viewCourses(ModelMap map, @RequestParam(value = "messageText", defaultValue = "", required = false) String messageText) {
+		List<CourseEntity> courseList = userService.getCoursesList();
+		List<CourseBean> courseBeanList = userService.populateCourses(courseList);
+		
+		Map<Integer, String> courseCategories = userService.getCourseCategories();
+		map.addAttribute("courseCategories", courseCategories);
+		map.addAttribute("courseList", courseBeanList);
+		map.addAttribute("viewPage", "viewcourses");
+		map.addAttribute("message", messageText);
+		return "adminactivities";
+	}
+	
+	@RequestMapping(value = "/leadsBulkUpload", method = RequestMethod.GET)
+	public String viewCourses(ModelMap map) {
+		map.addAttribute("viewPage", "leadsBulkUpload");
+		//map.addAttribute("templateDownloadFile", "radical.xlx");
+		return "adminactivities";
+	}
+	
 
+	@RequestMapping("/downloadFile/{filePath}")
+	public String downloadFile(@PathVariable("filePath") String filePath,
+			HttpServletResponse response) {
+		try {
+			this.userService.downloadXlsFileBasedOnFileName(filePath, response);
+		} catch (Exception ex) {
+			throw new RuntimeException("Some thing went wrong while download the status of the upload file");
+		}
+		return null;
+	}
+	
+	@RequestMapping("/downloadCourseFile/{courseId}")
+	public String downloadCourseFile(@PathVariable("courseId") int courseId,
+			HttpServletResponse response) {
+		try {
+			this.userService.downloadCourseFile(courseId,response);
+			//this.userService.downloadXlsFileBasedOnFileName(filePath, response);
+		} catch (Exception ex) {
+			throw new RuntimeException("Some thing went wrong while download the status of the upload file");
+		}
+		return null;
+	}
+	
+	
+	@RequestMapping(value = "/uploadBulkLeads", method = RequestMethod.POST)
+	public String uploadBulkLeads(@RequestParam("file") MultipartFile uploadFile,
+			HttpServletRequest request, HttpServletResponse response, Model model) {
+			HttpSession session = request.getSession();
+			if (!uploadFile.isEmpty()) {
+				try {
+					File convFile = new File(uploadFile.getOriginalFilename());
+					convFile.createNewFile();
+					FileOutputStream fos = new FileOutputStream(convFile);
+					fos.write(uploadFile.getBytes());
+					fos.close();
+					FileInputStream file = new FileInputStream(convFile);
+					XSSFWorkbook workbook = new XSSFWorkbook(file);
+					XSSFSheet sheet = workbook.getSheetAt(0);
+					Iterator<Row> rowIterator = sheet.rowIterator();
+					List<String> childIds = new ArrayList<String>();
+					int statusColumnIndex = 12;
+					userService.processUploadBulkLeadsFile(rowIterator, statusColumnIndex);
+					String rootPath = System.getProperty(Constants.CATALINA_PATH);
+					File dir = new File(rootPath + File.separator + Constants.TMP);
+					if (!dir.exists()) {
+						dir.mkdirs();
+					}
+					File statusFile = new File(
+							dir.getAbsolutePath() + File.separator + "Leads" + new Date().getTime() + Constants.XLS);
+					FileOutputStream out = new FileOutputStream(statusFile);
+					workbook.write(out);
+					model.addAttribute(Constants.FILE_PATHS, statusFile.getName());
+					out.close();
+					file.close();
+					model.addAttribute(Constants.MESSAGE, Constants.FILE_PROCESSING_DONE_SUCCESSFULLY);
+					model.addAttribute("viewPage", "leadsBulkUpload");
+					model.addAttribute("templateDownloadFile", "radical.xlx");
+				} catch (Exception ex) {
+					throw new RuntimeException(Constants.LEADS_ADDED_FAILED);
+				}
+			} else {
+				model.addAttribute(Constants.MESSAGE, Constants.PLEASE_UPLOAD_THE_FILE);
+			}
+			return "adminactivities";
+		}
+	
+	@RequestMapping(value = "/updateCourse", method = RequestMethod.POST)
+	@ResponseBody
+	public String updateCourse(@RequestParam("courseId") int courseId, @RequestParam("value") int value) {
+		CourseEntity courseEntity = userService.getCourseByCourseId(courseId);
+		courseEntity.setIsActive(value);
+		courseEntity.setUpdatedTime(new Date());
+		userService.saveCourse(courseEntity);
+		userService.getAllCourses();
+		return "success";
+	}
+	
+	@RequestMapping(value = "/isCourseExits", method = RequestMethod.POST)
+	@ResponseBody
+	public String isCourseExits(@RequestParam("courseName") String name) {
+		CourseEntity courseEntity = userService.getCourseByCourseName(name);
+		if (courseEntity == null) {
+			return "no";
+		} else {
+			return "yes";
+		}
+	}
+	
+	@RequestMapping(value = "/addCourse", method = RequestMethod.POST)
+	public String addCourse(@RequestParam("courseName") String courseName, @RequestParam("categeoryId") int categoryId) {
+			CourseEntity courseEntity = new CourseEntity();
+			courseEntity.setCourseName(courseName);
+			courseEntity.setCategeoryId(categoryId);
+			courseEntity.setIsActive(1);
+			courseEntity.setCreatedTime(new Date());
+			userService.saveCourse(courseEntity);
+			return "redirect:/viewCourses?messageText=Course added successfully";
+	}
+	
+	@RequestMapping(value="/viewImages/{categoryId}", method = RequestMethod.GET)
+	public String viewImages(Model model,HttpServletRequest request,@PathVariable int categoryId) {
+		HttpSession session = request.getSession();
+		try {
+			CourseCategeoryEntity category = userService.getCategoryListBasedOnCourseId(categoryId);
+			model.addAttribute("reportImagesList",category.getMailerPath()/*.replace("www.radicaltechnologies.org", "D://radical-pune/trunk/radicallms/target/tomcat/webapps")*/);
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return "viewImage";
+	} 
 }

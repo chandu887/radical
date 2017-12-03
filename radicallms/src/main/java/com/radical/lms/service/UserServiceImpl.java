@@ -1,19 +1,27 @@
 package com.radical.lms.service;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.sql.Blob;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -26,11 +34,16 @@ import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
+import javax.servlet.ServletOutputStream;
+import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.lang.NumberUtils;
 import org.apache.poi.hssf.usermodel.HSSFFont;
 import org.apache.poi.hssf.util.HSSFColor;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.util.NumberToTextConverter;
 import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -38,6 +51,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.radical.lms.beans.CourseBean;
 import com.radical.lms.beans.DashBoardForm;
 import com.radical.lms.beans.LeadsEntityBean;
 import com.radical.lms.beans.MailTemplateBean;
@@ -54,6 +68,12 @@ import com.radical.lms.entity.UsersEntity;
 public class UserServiceImpl implements UserService {
 	@Autowired
 	private UserDao userDao;
+	
+	@Autowired
+	private LeadService leadService;
+	
+	@Autowired
+	private EmailService emailService;
 
 	private Properties properties = new Properties();
 
@@ -68,6 +88,10 @@ public class UserServiceImpl implements UserService {
 	private Map<String, Integer> categoryNameIdMapping = new ConcurrentHashMap<String, Integer>();
 
 	private Map<String, Integer> courseNameIdMapping = new ConcurrentHashMap<String, Integer>();
+	
+	private Map<Integer, String> agentsMapping = new ConcurrentHashMap<Integer, String>();
+	
+	
 
 	public void init() {
 		loadCache();
@@ -78,6 +102,23 @@ public class UserServiceImpl implements UserService {
 		getAllCourseCategories();
 		getAllCourses();
 		getLeadSources();
+		getAgents();
+	}
+	@Transactional
+	public void getAgents() {
+		List<UsersEntity> usersList = userDao.getUsersList();
+		Map<Integer, String> usersMapping = new ConcurrentHashMap<Integer, String>();
+		for (UsersEntity usersEntity : usersList) {
+			usersMapping.put(usersEntity.getUserId(), usersEntity.getUserName());
+		}
+		setAgentsMapping(usersMapping);
+	}
+	public Map<Integer, String> getAgentsMapping() {
+		return agentsMapping;
+	}
+
+	public void setAgentsMapping(Map<Integer, String> agentsMapping) {
+		this.agentsMapping = agentsMapping;
 	}
 
 	@Transactional
@@ -118,16 +159,38 @@ public class UserServiceImpl implements UserService {
 		setCourseCategories(courseCategories);
 		setCategoryNameIdMapping(courseNameIdMapping);
 	}
+	
+	@Transactional
+	public void saveOrUpdateUser(UsersEntity usersEntity) {
+		userDao.saveOrUpdateUser(usersEntity);
+	}
 
 	@Transactional
-	public UsersEntity getUsers(String userId) {
+	public UsersEntity getUsers(int userId) {
 		return userDao.getUsers(userId);
+	}
+	
+	@Transactional
+	public UsersEntity getUserByUserName(String name) {
+		return userDao.getUserByUserName(name);
 	}
 
 	@Transactional
 	public UsersEntity checkLoginDetails(String userName, String passWord) {
 		return userDao.checkLoginDetails(userName, passWord);
 	}
+	
+	@Transactional
+	public List<UsersEntity> getUsersList() {
+		return userDao.getUsersList();
+	}
+	
+	@Transactional
+	public List<UsersEntity> getAgentsList() {
+		return userDao.getAgentsList();
+	}
+	
+	
 
 	@Transactional
 	public List getCountByStatusType(DashBoardForm dashBoardForm) {
@@ -360,7 +423,18 @@ public class UserServiceImpl implements UserService {
 
 	@Transactional
 	public List<CourseEntity> getCourseList(int categoryId) {
-		return userDao.getCourseList(categoryId);
+		List courses =  userDao.getCourseList(categoryId);
+		List<CourseEntity> coursesList = new ArrayList<CourseEntity>();
+		for (Iterator courseIter = courses.iterator(); courseIter.hasNext();) {
+			Object[] objects = (Object[]) courseIter.next();
+			int courseId = (Integer) objects[0];
+			String courseName = (String) objects[1];
+			CourseEntity courseEntity = new CourseEntity();
+			courseEntity.setCourseId(courseId);
+			courseEntity.setCourseName(courseName);
+			coursesList.add(courseEntity);
+		}
+		return coursesList;
 	}
 
 	@Transactional
@@ -398,8 +472,8 @@ public class UserServiceImpl implements UserService {
 			templateBean.setCourseName(courseEntity.getCourseName());*/
 			templateBean.setCategoryId(categoryEntity.getCategoryId());
 			templateBean.setCategoryName(getCourseCategories().get(categoryEntity.getCategoryId()));
-			templateBean.setMailSubject(categoryEntity.getSubject());
-			templateBean.setMailBody(categoryEntity.getMessagebody());
+			//templateBean.setMailSubject(categoryEntity.getSubject());
+			templateBean.setMailBody(categoryEntity.getMailerPath());
 			if (categoryEntity.getCreatedTime() != null) {
 				templateBean.setCreatedTime(dateFormat.format(categoryEntity.getCreatedTime()));
 			}
@@ -452,5 +526,296 @@ public class UserServiceImpl implements UserService {
 	public int getTemplatesCount(DashBoardForm dashBoardForm) {
 		return userDao.getTemplatesCount(dashBoardForm);
 	}
+	
+	@Transactional
+	public List<CourseCategeoryEntity>  getCourseCategoriesList() {		
+		return userDao.getCourseCategoriesList();
+	}
+	
+	@Transactional
+	public void saveCategory(CourseCategeoryEntity categoryEntity) {
+		userDao.saveCategory(categoryEntity);
+	}
+	
+	@Transactional
+	public CourseCategeoryEntity getCategoryByCategoryId(int categoryId) {
+		return userDao.getCategoryByCategoryId(categoryId);
+	}
+	
+	@Transactional
+	public CourseCategeoryEntity getCategoryByCategoryName(String categoryName) {
+		return userDao.getCategoryByCategoryName(categoryName);
+	}
+	
+	@Transactional
+	public List<CourseEntity> getCoursesList() {
+		return userDao.getCoursesList();
+	}
+	
+	@Transactional
+	public List<CourseEntity> getCoursesListForEmailer() {
+		return userDao.getCoursesListForEmailer();
+	}
+	
+	@Transactional
+	public void saveCourse(CourseEntity courseEntity) {
+		userDao.saveCourse(courseEntity);
+	}
+	
+	@Transactional
+	public CourseEntity getCourseByCourseId(int courseId) {
+		return userDao.getCourseByCourseId(courseId);
+	}
+	
+	@Transactional
+	public CourseEntity getCourseByCourseName(String courseName) {
+		return userDao.getCourseByCourseName(courseName);
+	}
+	
+	public static Object getKeyFromValue(Map hm, Object value) {
+	    for (Object o : hm.keySet()) {
+	      if (hm.get(o).equals(value)) {
+	        return o;
+	      }
+	    }
+	    return null;
+	  }
+	
+	@Transactional
+	public void processUploadBulkLeadsFile(Iterator<Row> rowIterator, int statusColumnIndex) {
+		while (rowIterator.hasNext()) {
+			Row row = null;
+			try {
+				row = rowIterator.next();
+				if (row.getRowNum() == 0) {
+					row.createCell(statusColumnIndex).setCellValue(Constants.STATUS);
+					continue;
+				}
+				LeadsEntity leadsEntity = new LeadsEntity();
+				if (null != row.getCell(0)) {
+					leadsEntity.setName(row.getCell(0).toString().trim());
+				}
+				String mobileNum = "";
+				if (null != row.getCell(1)) {
+					String mobNumber = "";
+					if(row.getCell(1).getCellType() == row.getCell(1).CELL_TYPE_NUMERIC) {
+						mobNumber = NumberToTextConverter.toText(row.getCell(1).getNumericCellValue());
+					}
+					mobNumber = mobNumber.toString().trim().replace(" ", "").replace("-", "");
+					String numberString = numberE(mobNumber);
+					if(numberString.length() == 10 && NumberUtils.isNumber(numberString)) {
+						mobileNum = numberString;
+					}
+					leadsEntity.setMobileNo(mobileNum);
+				}
+				if (null != row.getCell(2)) {
+					String landLineNumber = "";
+					/*if(row.getCell(2).getCellType() == row.getCell(2).CELL_TYPE_NUMERIC) {
+						landLineNumber = NumberToTextConverter.toText(row.getCell(2).getNumericCellValue());
+					}*/
+					//row.getCell(2).toString().trim().replace(" ", "").replace("-", "")
+					landLineNumber = row.getCell(2).toString().trim().replace(" ", "").replace("-", "");
+					leadsEntity.setLandLineNumber(landLineNumber);
+				}
+				if (null != row.getCell(3)) {
+					leadsEntity.setEmailId(row.getCell(3).toString().trim());
+				}
+				int categoryId = 0;
+				if (null != row.getCell(4)) {
+					for (Map.Entry<Integer, String> entry : getCourseCategories().entrySet()) {
+						if ((row.getCell(4).toString().trim()).equalsIgnoreCase(entry.getValue())) {
+							categoryId = entry.getKey();
+							break;
+						}
+					}
+				}
+				leadsEntity.setCourseCategeory(categoryId);
 
+				int courseId = 0;
+				if (null != row.getCell(5)) {
+					for (Map.Entry<Integer, String> entry : getCourses().entrySet()) {
+						if ((row.getCell(5).toString().trim()).equalsIgnoreCase(entry.getValue())) {
+							courseId = entry.getKey();
+							break;
+						}
+					}
+				}
+				leadsEntity.setCourse(courseId);
+				;
+				if (null != row.getCell(6)) {
+					leadsEntity.setLeadSource(getLeadSoureId(row.getCell(6).toString().trim()));
+				}
+				if (null != row.getCell(7)) {
+					leadsEntity.setModeofTraining(row.getCell(7).toString().trim());
+				}
+				if (null != row.getCell(8)) {
+					leadsEntity.setAssignedTo(getUserId(row.getCell(8).toString().trim()));
+				}
+				if (null != row.getCell(9)) {
+					leadsEntity.setLocation(row.getCell(9).toString().trim());
+				}
+				if (null != row.getCell(10)) {
+					leadsEntity.setTypeofTraining(row.getCell(10).toString().trim());
+				}
+				if (null != row.getCell(11)) {
+					leadsEntity.setComments(row.getCell(11).toString().trim());
+				}
+				leadsEntity.setStatus(1);
+				leadsEntity.setCreatedDate(new Date());
+				leadService.saveLead(leadsEntity);
+				if (leadsEntity != null) {
+					if (leadsEntity.getEmailId() != null) {
+						if (leadsEntity.getCourseCategeory() != 0) {
+							CourseCategeoryEntity category = getCategoryListBasedOnCourseId(
+									leadsEntity.getCourseCategeory());
+							emailService.sendMail(leadsEntity.getEmailId(), category.getSubject(),
+									category.getMessagebody());
+						} else {
+							emailService.sendMail(leadsEntity.getEmailId(), Constants.MAIL_SUBJECT, null);
+						}
+					}
+					if (leadsEntity.getMobileNo() != null) {
+						sendSms(Constants.SMS_TEMPLATE, leadsEntity.getMobileNo());
+					}
+				}
+				row.createCell(statusColumnIndex).setCellValue("User Details are added successfully");
+			} catch (Exception ex) {
+				ex.printStackTrace();
+			}
+		}
+	}
+	
+	private int getUserId(String userName) {
+		for (Map.Entry<Integer, String> entry : getAgentsMapping().entrySet()) {
+			if (userName.equalsIgnoreCase(entry.getValue())) {
+				return entry.getKey();
+			}
+		}
+		return 0;
+	}
+	
+	/**
+	 * Download the xls file based on the path given
+	 * @param filePath pathOfTheFile
+	 */
+	public void downloadXlsFileBasedOnFileName(String filePath, HttpServletResponse response) {
+		try {
+			String rootPath = System.getProperty(Constants.CATALINA_PATH);
+			File dir = new File(rootPath + File.separator + Constants.TMP);
+			if (!dir.exists()) {
+				dir.mkdirs();
+			}
+			String fileName = dir.getAbsolutePath() + File.separator + filePath + Constants.XLS;
+			File inputFile = new File(fileName);
+			File outPutFile = new File(filePath + Constants.XLS);
+			outPutFile.createNewFile();
+			FileInputStream fis = new FileInputStream(inputFile);
+			FileOutputStream fos = new FileOutputStream(outPutFile);
+			int i = 0;
+			while ((i = fis.read()) != -1) {
+				fos.write((byte) i);
+			}
+			fos.close();
+			fis.close();
+			FileInputStream file = new FileInputStream(outPutFile);
+			XSSFWorkbook workbook = new XSSFWorkbook(file);
+			XSSFSheet sheet = workbook.getSheetAt(0);
+			ServletOutputStream out = response.getOutputStream();
+			response.setContentType(Constants.MS_EXCEL_FORMAT);
+			response.addHeader(Constants.CONTENT_DISPOSITIONS, Constants.ATTACHMENT_FILE + outPutFile);
+			workbook.write(out);
+			out.close();
+			file.close();
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+	}
+
+	/**
+	 * Download the xls file based on the path given
+	 * @param filePath pathOfTheFile
+	 */
+	public void downloadCourseFile(int courseId, HttpServletResponse response) {
+		try {
+			CourseEntity courseEntity = getCourseByCourseId(courseId);
+			Blob blob = courseEntity.getContent();
+			InputStream in = blob.getBinaryStream();
+			String someFile = courseEntity.getMailerPath();
+			ServletOutputStream out = response.getOutputStream();
+			response.setContentType(courseEntity.getFileType());
+			response.addHeader(Constants.CONTENT_DISPOSITIONS, Constants.ATTACHMENT_FILE + someFile);
+			int bytesRead = -1;
+            byte[] buffer = new byte[4096];
+            while ((bytesRead = in.read(buffer)) != -1) {
+            	out.write(buffer, 0, bytesRead);
+            }
+            in.close();
+            out.close();
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+	}
+
+	private int getLeadSoureId(String leadSource) {
+		for (Map.Entry<Integer, String> entry : getLeadSourceMapping().entrySet()) {
+			if (leadSource.equalsIgnoreCase(entry.getValue())) {
+				return entry.getKey();
+			}
+		}
+		return 0;
+	}
+	@Transactional
+	public List<CourseBean> populateCourses(List<CourseEntity> coursesList) {
+		List<CourseBean> courseBeanList = new ArrayList<CourseBean>();
+		for (CourseEntity courseEntity : coursesList) {
+			CourseBean courseBean = new CourseBean();
+			courseBean.setCourseId(courseEntity.getCourseId());
+			courseBean.setCourseName(courseEntity.getCourseName());
+			courseBean.setCategeoryName(courseCategories.get(courseEntity.getCategeoryId()));
+			courseBean.setIsActive(courseEntity.getIsActive());
+			courseBeanList.add(courseBean);
+		}
+		return courseBeanList;
+	}
+	
+	public static String numberE(String number){
+		if(number.contains(".")) {
+			number = number.replace(".", "").trim();
+			if (number.contains("E14")) {
+				number = number.replace("E14", "").trim();
+			} else if (number.contains("E13")) {
+				number = number.replace("E13", "").trim();
+			} else if (number.contains("E12")) {
+				number = number.replace("E12", "").trim();
+			} else if (number.contains("E11")) {
+				number = number.replace("E11", "").trim();
+			} else if (number.contains("E10")) {
+				number = number.replace("E10", "").trim();
+			} else if (number.contains("E9")) {
+				number = number.replace("E9", "").trim();
+			} else if (number.contains("E8")) {
+				number = number.replace("E8", "").trim();
+			} else if (number.contains("E7")) {
+				number = number.replace("E7", "").trim();
+			} else if (number.contains("E6")) {
+				number = number.replace("E6", "").trim();
+			} else if (number.contains("E5")) {
+				number = number.replace("E5", "").trim();
+			} else if (number.contains("E4")) {
+				number = number.replace("E4", "").trim();
+			} else if (number.contains("E3")) {
+				number = number.replace("E3", "").trim();
+			} else if (number.contains("E2")) {
+				number = number.replace("E2", "").trim();
+			} else if (number.contains("E1")) {
+				number = number.replace("E1", "").trim();
+			} else if (number.contains("E0")) {
+				number = number.replace("E0", "").trim();
+			}
+		}
+		return number;
+	}
+
+	
+	
 }

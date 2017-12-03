@@ -1,11 +1,18 @@
 package com.radical.lms.service;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.sql.Blob;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import javax.activation.DataHandler;
+import javax.activation.DataSource;
+import javax.activation.FileDataSource;
 import javax.annotation.PostConstruct;
 import javax.mail.Address;
 import javax.mail.BodyPart;
@@ -29,10 +36,12 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.radical.lms.constants.Constants;
 import com.radical.lms.dao.EmailDao;
 import com.radical.lms.entity.CourseCategeoryEntity;
+import com.radical.lms.entity.CourseEntity;
 import com.radical.lms.entity.EmailTimeEntity;
 import com.radical.lms.entity.LeadsEntity;
 import com.radical.lms.entity.SendEmailEntity;
@@ -55,6 +64,16 @@ public class EmailServiceImpl implements EmailService {
 	Store store = null;
 
 	private Properties properties = new Properties();
+	
+
+	public Properties getProperties() {
+		return properties;
+	}
+
+
+	public void setProperties(Properties properties) {
+		this.properties = properties;
+	}
 
 	@PostConstruct
 	public void init() {
@@ -778,5 +797,141 @@ public class EmailServiceImpl implements EmailService {
 		}
 		return leadsEntity;
 	}
+
+
+	@Transactional
+	public boolean sendMailWithAttachementDynamically(String toMailId, String subject, String mailerPath, CourseEntity courseEntity) {
+		try {
+			String mailBody = "";
+			if (mailerPath == null) {
+				mailBody = properties.getProperty(Constants.DAFAULT_MAILER);
+			} else {
+				mailBody = properties.getProperty(Constants.CATEGORY_MAILER);
+				mailBody = mailBody.replaceAll(Constants.MAILER_PATH, mailerPath);
+			}
+			if (subject == null) {
+				subject = Constants.MAIL_SUBJECT;
+			}
+			String userid = properties.getProperty(/*Constants.PROPERTIES_MAILID*/"");
+			String password = properties.getProperty(/*Constants.PROPERTIES_PASSWORD*/"");
+			String host = properties.getProperty("host");
+			
+			MimeMessage message = new MimeMessage(session);
+			InternetAddress fromAddress = null;
+			InternetAddress toAddress = null;
+			try {
+				fromAddress = new InternetAddress(userid);
+				toAddress = new InternetAddress(toMailId);
+			} catch (AddressException e) {
+				e.printStackTrace();
+			}
+
+			message.setFrom(fromAddress);
+			message.setRecipient(RecipientType.TO, toAddress);
+			message.setSubject(subject);
+			
+			BodyPart messageBodyPartBody = new MimeBodyPart();
+			messageBodyPartBody.setContent(mailBody, "text/html");
+			MimeMultipart multipart = new MimeMultipart("related");
+			multipart.addBodyPart(messageBodyPartBody);
+			
+			BodyPart messageBodyPart = new MimeBodyPart();
+			
+			if (courseEntity != null && courseEntity.getContent() != null){
+				Blob blob = courseEntity.getContent();
+				InputStream in = blob.getBinaryStream();
+				File convFile = new File(courseEntity.getMailerPath());
+				convFile.createNewFile();
+				FileOutputStream fos = new FileOutputStream(convFile);
+
+				int bytesRead = -1;
+	            byte[] buffer = new byte[4096];
+	            while ((bytesRead = in.read(buffer)) != -1) {
+	            	fos.write(buffer, 0, bytesRead);
+	            }
+	            in.close();
+	            fos.close();
+				String filename = convFile.getName();
+				DataSource source = new FileDataSource(filename);
+		        messageBodyPart.setDataHandler(new DataHandler(source));
+		        messageBodyPart.setFileName(filename);
+			} else {
+				String filePath = System.getProperty(Constants.CATALINA_PATH) + File.separator + "webapps"
+						+ File.separator + "CategoryMailer" + File.separator + "brochures" + File.separator;
+				String fileName = "Radical_Brochure.pdf";
+				DataSource source = new FileDataSource(filePath+fileName);
+		        messageBodyPart.setDataHandler(new DataHandler(source));
+		        messageBodyPart.setFileName(fileName);
+			}
+	        multipart.addBodyPart(messageBodyPart);
+			message.setContent(multipart);
+			Transport transport = session.getTransport("smtps");
+			transport.connect(host, userid, password);
+			transport.sendMessage(message, message.getAllRecipients());
+			transport.close();
+			return true;
+		} catch (Exception ex) {
+			ex.printStackTrace();
+			return false;
+		}
+	}
+
+
+
+	@Transactional
+	public boolean sendMailWithAttachementManually(String toMailId, String subject, String mailBody,MultipartFile attachement) {
+		try {
+			if (mailBody == null) {
+				mailBody = properties.getProperty(Constants.MAIL_BODY);
+			} else {
+				mailBody = properties.getProperty(Constants.MAIL_HEAD) + mailBody + properties.getProperty(Constants.MAIL_TAIL);
+			}
+			if (subject == null) {
+				subject = Constants.MAIL_SUBJECT;
+			}
+			String userid = properties.getProperty(/*Constants.PROPERTIES_MAILID*/"");
+			String password = properties.getProperty(/*Constants.PROPERTIES_PASSWORD*/"");
+			String host = properties.getProperty("host");
+			MimeMessage message = new MimeMessage(session);
+			InternetAddress fromAddress = null;
+			InternetAddress toAddress = null;
+			try {
+				fromAddress = new InternetAddress(userid);
+				toAddress = new InternetAddress(toMailId);
+			} catch (AddressException e) {
+				e.printStackTrace();
+			}
+
+			message.setFrom(fromAddress);
+			message.setRecipient(RecipientType.TO, toAddress);
+			message.setSubject(subject);
+			
+			BodyPart messageBodyPartBody = new MimeBodyPart();
+			messageBodyPartBody.setContent(mailBody, "text/html");
+			MimeMultipart multipart = new MimeMultipart("related");
+			multipart.addBodyPart(messageBodyPartBody);
+			File convFile = new File(attachement.getOriginalFilename());
+			convFile.createNewFile();
+			FileOutputStream fos = new FileOutputStream(convFile);
+			fos.write(attachement.getBytes());
+			fos.close();
+			BodyPart messageBodyPart = new MimeBodyPart();
+			String filename = convFile.getName();
+			DataSource source = new FileDataSource(filename);
+	        messageBodyPart.setDataHandler(new DataHandler(source));
+	        messageBodyPart.setFileName(filename);
+	        multipart.addBodyPart(messageBodyPart);
+			message.setContent(multipart);
+			Transport transport = session.getTransport("smtps");
+			transport.connect(host, userid, password);
+			transport.sendMessage(message, message.getAllRecipients());
+			transport.close();
+			return true;
+		} catch (Exception ex) {
+			ex.printStackTrace();
+			return false;
+		}
+	}
+
 
 }

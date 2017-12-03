@@ -13,6 +13,7 @@ public class DashBoardForm {
 	int openCount;
 	int hotCount;
 	int closedCount;
+	int deleteCount;
 	int totalLeadsCount;
 	int pageTotalCount;
 	List<Integer> pageList;
@@ -31,7 +32,14 @@ public class DashBoardForm {
 	String location;
 	int assignedTo;
 	int leadSource;
-	
+	int leadId;
+	String name;
+	public int getDeleteCount() {
+		return deleteCount;
+	}
+	public void setDeleteCount(int deleteCount) {
+		this.deleteCount = deleteCount;
+	}
 	
 	public String getModeOfTraining() {
 		return modeOfTraining;
@@ -221,6 +229,16 @@ public class DashBoardForm {
 	public void setTotalPages(int totalPages) {
 		this.totalPages = totalPages;
 	}
-	
-	
+	public int getLeadId() {
+		return leadId;
+	}
+	public void setLeadId(int leadId) {
+		this.leadId = leadId;
+	}
+	public String getName() {
+		return name;
+	}
+	public void setName(String name) {
+		this.name = name;
+	}
 }

@@ -13,9 +13,17 @@ import com.radical.lms.entity.UsersEntity;
 
 public interface UserDao {
 	
-	UsersEntity getUsers(String userId);
+	void saveOrUpdateUser(UsersEntity usersEntity);
+	
+	UsersEntity getUsers(int userId);
 
+	UsersEntity getUserByUserName(String name);
+	
 	UsersEntity checkLoginDetails(String userName, String passWord);
+	
+	List<UsersEntity> getUsersList();
+	
+	List<UsersEntity> getAgentsList();
 
 	List getCountByStatusType(DashBoardForm dashBoardForm);
 
@@ -48,4 +56,23 @@ public interface UserDao {
 	void sendTemplatedEmail(SendEmailEntity sendEmailEntity);
 	
 	int getTemplatesCount(DashBoardForm dashBoardForm);
+	
+	List<CourseCategeoryEntity> getCourseCategoriesList();
+	
+	void saveCategory(CourseCategeoryEntity categoryEntity);
+	
+	CourseCategeoryEntity getCategoryByCategoryId(int categoryId);
+	
+	CourseCategeoryEntity getCategoryByCategoryName(String categoryName);
+	
+	List<CourseEntity> getCoursesList();
+	
+	List<CourseEntity> getCoursesListForEmailer();
+	
+	void saveCourse(CourseEntity courseEntity);
+	
+	CourseEntity getCourseByCourseId(int courseId);
+	
+	CourseEntity getCourseByCourseName(String courseName);
+
 }
