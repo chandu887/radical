@@ -113,7 +113,11 @@ public class UserController {
 			dashBoardForm.setPageNumber(1);
 		}
 
+		Date date1 = new Date();
 		List countList = this.userService.getCountByStatusType(dashBoardForm);
+		Date date2 = new Date();
+		System.out.println("millis to get count query" + (date2.getTime()- date1.getTime()));
+		
 		Map<Integer, Integer> countMap = new ConcurrentHashMap<Integer, Integer>();
 		countMap.put(1, 0);
 		countMap.put(2, 0);
@@ -184,7 +188,7 @@ public class UserController {
 			map.addAttribute("templateList", templateList);
 			dashBoardForm.setViewPage("viewMailTemplate");
 		} else {
-			List<LeadsEntityBean> leadsList = this.userService.getLeadsStatus(dashBoardForm);
+			List<LeadsEntity> leadsList = this.userService.getLeadsStatus(dashBoardForm);
 			map.addAttribute("leadsList", leadsList);
 			dashBoardForm.setViewPage("viewLeads");
 		}
@@ -198,7 +202,7 @@ public class UserController {
 		List<UsersEntity> userssList = userService.getUsersList();
 		map.addAttribute("userssList", userssList);
 
-
+		map.addAttribute("statusMap", userService.getStatusMap());
 		map.addAttribute("dashBoardForm", dashBoardForm);
 		map.addAttribute("coursesMap", coursesMap);
 		map.addAttribute("leadSourceMapping", leadSourceMapping);
@@ -403,7 +407,7 @@ public class UserController {
 			session.setAttribute("dashBoardForm", dashBoardForm);
 			return "redirect:/dashboard?leadStatus=" + statusFilter + "&isFromFilter=true";
 		} else if (filterType == 1) {
-			List<LeadsEntityBean> leadsList = this.userService.getLeadsStatus(dashBoardForm);
+			List<LeadsEntity> leadsList = this.userService.getLeadsStatus(dashBoardForm);
 			XSSFWorkbook workbook = this.userService.downloadLeadsSheet(leadsList);
 			clearDashBoardFilter(dashBoardForm);
 			try {
@@ -534,7 +538,7 @@ public class UserController {
 		for (String leadId : downloadLeadIdsSplitArray) {
 			downloadLeadIdsList.add(Integer.parseInt(leadId));
 		}
-		List<LeadsEntityBean> leadsList = this.userService.getLeadsListForDownload(downloadLeadIdsList);
+		List<LeadsEntity> leadsList = this.userService.getLeadsListForDownload(downloadLeadIdsList);
 		XSSFWorkbook workbook = this.userService.downloadLeadsSheet(leadsList);
 		try {
 			String fileName = "leadsdump-" + new Date().getTime() + ".xlsx";

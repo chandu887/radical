@@ -278,6 +278,14 @@ public class UserDaoImpl implements UserDao {
 		}
 		return null;
 	}
+	
+	@Transactional
+	public List getAllUsersList() {
+		String query = "select userid, username from users";
+		Query sqlQuery = this.sessionFactory.getCurrentSession().createSQLQuery(query);
+		return sqlQuery.list();
+	}
+	
 
 	public List<LeadsEntity> getLeadsListForDownload(List<Integer> downloadLeadIdsList) {
 		Query query = this.sessionFactory.getCurrentSession().createQuery("from LeadsEntity where leadiId in (:downloadLeadIdsList)");
