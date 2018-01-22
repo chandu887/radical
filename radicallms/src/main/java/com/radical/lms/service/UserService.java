@@ -108,4 +108,6 @@ public interface UserService {
 	
 	Map<Integer, String> getStatusMap();
 	
+	CourseEntity getCourseDataByCourseId(int courseId);
+	
 }

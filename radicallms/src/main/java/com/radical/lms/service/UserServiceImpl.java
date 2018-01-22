@@ -198,7 +198,6 @@ public class UserServiceImpl implements UserService {
 		return userDao.getCountByStatusType(dashBoardForm);
 	}
 
-
 	@Transactional
 	public List<LeadsEntity> getLeadsStatus(DashBoardForm dashBoardForm) {
 		Date date1 = new Date();
@@ -263,7 +262,6 @@ public class UserServiceImpl implements UserService {
 	public String leadsChangeStatus(List<Integer> changeStatusLeadIdsList, int statusType, String reason) {
 		return userDao.leadsChangeStatus(changeStatusLeadIdsList, statusType, reason);
 	}
-
 
 	public XSSFWorkbook downloadLeadsSheet(List<LeadsEntity> leadsEntityList) {
 		Date date1 = new Date();
@@ -337,13 +335,19 @@ public class UserServiceImpl implements UserService {
 
 		header.createCell(18).setCellValue("Weekend/ Weekday");
 		header.getCell(18).setCellStyle(style);
+		
+		header.createCell(19).setCellValue("Landline Number");
+		header.getCell(19).setCellStyle(style);
+		
+		header.createCell(20).setCellValue("Label");
+		header.getCell(20).setCellStyle(style);
 
 		int rowCount = 1;
 		Map<Integer, String> usersMap = getUsersMap();
 		Map<Integer, String> statusMap = getStatusMap();
 		if (leadsEntityList != null) {
 			for (LeadsEntity leadsEntity : leadsEntityList) {
-				if(leadsEntity.getStatus() != 4){
+				//if(leadsEntity.getStatus() != 4){
 				XSSFRow aRow = sheet.createRow(rowCount);
 				aRow.createCell(0).setCellValue(leadsEntity.getLeadiId());
 				aRow.createCell(1).setCellValue(leadsEntity.getName());
@@ -383,8 +387,12 @@ public class UserServiceImpl implements UserService {
 				aRow.createCell(16).setCellValue(leadsEntity.getLocation());
 				aRow.createCell(17).setCellValue(leadsEntity.getModeofTraining());
 				aRow.createCell(18).setCellValue(leadsEntity.getTypeofTraining());
+				aRow.createCell(19).setCellValue(leadsEntity.getLandLineNumber());
+				aRow.createCell(20).setCellValue(leadsEntity.getLabels());
+				
+				
 				rowCount++;
-				}
+				//}
 			}
 		} else {
 			XSSFRow aRow = sheet.createRow(rowCount);
@@ -396,7 +404,6 @@ public class UserServiceImpl implements UserService {
 		return workbook;
 	}
 
-	
 	private List<LeadsEntityBean> getLeadsEntityBeanByLeadsEntity(List<LeadsEntity> leads) {
 		if (leads != null) {
 			List<LeadsEntityBean> leadBeanList = new ArrayList<LeadsEntityBean>();
@@ -417,6 +424,7 @@ public class UserServiceImpl implements UserService {
 				if (leadsEntity.getAssignedTo() != 0) {
 					assgniedTo = userDao.getAssignedToName(leadsEntity.getAssignedTo());
 				}
+				
 				Date createdDate = leadsEntity.getCreatedDate();
 				Date updateDate = leadsEntity.getLastUpdatedDate();
 				DateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy / HH:mm a");
@@ -448,14 +456,12 @@ public class UserServiceImpl implements UserService {
 		return null;
 	}
 
-
 	@Transactional
 	public List<LeadsEntity> getLeadsListForDownload(List<Integer> downloadLeadIdsList) {
 		List<LeadsEntity> leads = userDao.getLeadsListForDownload(downloadLeadIdsList);
 		//List<LeadsEntityBean> leadBeanList = getLeadsEntityBeanByLeadsEntity(leads);
 		return leads;
 	}
-
 
 	@Transactional
 	public List<CourseEntity> getCourseList(int categoryId) {
@@ -473,6 +479,24 @@ public class UserServiceImpl implements UserService {
 		return coursesList;
 	}
 
+	@Transactional
+	public CourseEntity getCourseDataByCourseId(int courseId) {
+		List courses =  userDao.getCourseDataByCourseId(courseId);
+		List<CourseEntity> coursesList = new ArrayList<CourseEntity>();
+		for (Iterator courseIter = courses.iterator(); courseIter.hasNext();) {
+			Object[] objects = (Object[]) courseIter.next();
+			int id = (Integer) objects[0];
+			String courseName = (String) objects[1];
+			int categoryId = (Integer) objects[2];
+			CourseEntity courseEntity = new CourseEntity();
+			courseEntity.setCourseId(courseId);
+			courseEntity.setCourseName(courseName);
+			courseEntity.setCategeoryId(categoryId);
+			return courseEntity;
+		}
+		return null;
+	}
+	
 	@Transactional
 	public CourseEntity getCourseListBasedOnCourseId(int courseId) {
 		return userDao.getCourseListBasedOnCourseId(courseId);
@@ -530,8 +554,10 @@ public class UserServiceImpl implements UserService {
 	public void sendSms(String sms, String mobileNumber) {
 		try {
 			String sendSms = URLEncoder.encode(sms, "UTF-8");
-			String url = "http://sms.xpresssms.in/api/api.php?ver=1&mode=1&action=push_sms&type=1&route=2&login_name=radtec&api_password=e51354d757f40f75d8d6&message="
-					+ sendSms + "&number=" + mobileNumber + "&sender=RadTec";
+			/*String url = "http://sms.xpresssms.in/api/api.php?ver=1&mode=1&action=push_sms&type=1&route=2&login_name=radtec&api_password=e51354d757f40f75d8d6&message="
+					+ sendSms + "&number=" + mobileNumber + "&sender=RadTec";*/
+			String url = "http://acies.instantalerts.in/api/sms_api.php?username=Radical&api_password=tqvgr89c1ck&message="
+					+ sendSms + "&destination=" + mobileNumber + "&type=2&sender=RadTec";	
 			System.out.println(url);
 			URL obj = new URL(url);
 			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
@@ -874,7 +900,5 @@ public class UserServiceImpl implements UserService {
 		statusMap.put(5, "Hot Lead");
 		return statusMap;
 	}
-
-	
 	
 }
